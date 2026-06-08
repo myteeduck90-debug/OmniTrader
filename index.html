@@ -1251,92 +1251,332 @@ function renderHubRankings(sport){
 }
 
 // ================================================================
-// === CALCULATOR SEARCH ENGINE ===
-// Handles multi-word keywords, 3-round pick separation, 
-// automatic package decay logic, and premium toggles.
+// === CALCULATOR SEARCH ===
+// MIGRATE TO: src/components/PlayerSearch.jsx
 // ================================================================
+function getCalcPool(){
+  const pool=[];
+  ['nfl','mlb','nba'].forEach(s=>{
+    if(!CALC_SPORTS[s]) return;
+    pool.push(...DB[s].filter(passesFilter));
+    pool.push(...(PICKS[s]||[]));
+  });
+  return pool;
+}
 
-// [Detailed implementation of getCalcPool, event handlers (doSearch, openDD, delayClose),
-// rendering logic (renderDD, ddItemHTML), and trade management (addPlayer, removePlayer,
-// clearTrade, renderSide, updateTotals, analyze) can be found in reference 0.1.1]
+const DD_TIMERS={};
+const lastSide={a:'a',b:'b'};
 
-// ===== CALC SEARCH ENGINE AND EVENT HANDLERS =====
-const DD_TIMERS = {};
+function doSearch(side){clearTimeout(DD_TIMERS[side]);DD_TIMERS[side]=setTimeout(()=>renderDD(side),100);}
+function openDD(side){lastSide.last=side;setTimeout(()=>renderDD(side),60);}
+function delayClose(side){clearTimeout(DD_TIMERS[`close-${side}`]);DD_TIMERS[`close-${side}`]=setTimeout(()=>{const el=document.getElementById(`dd-${side}`);if(el)el.classList.remove('open');},220);}
 
-// Helper: Fetches and merges player pools for searching
-function getPool(sport) {
-  if (sport === 'multi') {
-    return [...(DB.nfl || []), ...(PICKS.nfl || []), ...(DB.mlb || []), ...(PICKS.mlb || []), ...(DB.nba || []), ...(PICKS.nba || [])];
+function renderDD(side){
+  const query=document.getElementById(`srch-${side}`)?.value.trim().toLowerCase()||'';
+  const ddEl=document.getElementById(`dd-${side}`);if(!ddEl)return;
+  const used=[...TRADE.a,...TRADE.b].map(p=>p.id);
+  const pool=getCalcPool().filter(p=>!used.includes(p.id));
+  if(!query){
+    const top=pool.filter(p=>p.age!=='PICK').slice(0,10);
+    if(!top.length){ddEl.classList.remove('open');return;}
+    ddEl.innerHTML=`<div class="dd-section-label">Top Players by Value</div>`+top.map(ddItemHTML).join('');
+    ddEl.classList.add('open');return;
   }
-  return [...(DB[sport] || []), ...(PICKS[sport] || [])];
+  const words=query.split(/\s+/);
+  const matched=pool.filter(p=>words.every(w=>(p.displayName||'').toLowerCase().includes(w)));
+  if(!matched.length){ddEl.innerHTML=`<div class="dd-no-results">No results — try adjusting filters or sport toggles</div>`;ddEl.classList.add('open');return;}
+  const players=matched.filter(p=>p.age!=='PICK').slice(0,10);
+  const picks=matched.filter(p=>p.age==='PICK').slice(0,8);
+  let html='';
+  if(players.length)html+=`<div class="dd-section-label">Players</div>`+players.map(ddItemHTML).join('');
+  if(picks.length)html+=`<div class="dd-section-label">Draft Picks</div>`+picks.map(ddItemHTML).join('');
+  ddEl.innerHTML=html;ddEl.classList.add('open');
 }
 
-// Handles input search delays
-function doSearch(side) {
-  clearTimeout(DD_TIMERS[side]);
-  DD_TIMERS[side] = setTimeout(() => renderDD(side), 120);
+function ddItemHTML(p){
+  const isPick=p.age==='PICK';
+  const cs=isPick?'pick':p.sport,cl=isPick?'PICK':p.sport.toUpperCase();
+  const lvl=p.level&&p.level!=='MLB'?` · <span style="color:var(--gold);font-size:9px">${p.level}</span>`:'';
+  const ag=!isPick&&p.age&&p.age!=='N/A'?` · Age ${p.age}`:'';
+  return `<div class="dd-item" onmousedown="addPlayer('${p.id}','${isPick?'pick':'player'}')"><div class="dd-item-left"><div class="dd-item-name">${p.displayName}</div><div class="dd-item-meta"><span class="chip chip-${cs}">${cl}</span>${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div></div><div class="dd-item-val">${(p.value||0).toLocaleString()}</div></div>`;
 }
 
-// Renders the dropdown with filtered results and round formatting
-function renderDD(side) {
-  const query = document.getElementById(`srch-${side}`)?.value.trim().toLowerCase() || '';
-  const ddEl  = document.getElementById(`dd-${side}`);
-  if (!ddEl || !query) { if (ddEl) ddEl.innerHTML = ''; ddEl?.classList.remove('open'); return; }
-
-  // Filter pool based on active sports and search query
-  const used = [...TRADE.a, ...TRADE.b].map(p => p.id);
-  const matched = getPool('multi').filter(p => !used.includes(p.id) && (p.displayName || '').toLowerCase().includes(query));
-
-  if (!matched.length) {
-    ddEl.innerHTML = `<div class="dd-no-results">No results for "${query}"</div>`;
-    ddEl.classList.add('open');
-    return;
-  }
-
-  // Generate DD HTML (refer to original code for full implementation)
-  ddEl.innerHTML = matched.slice(0, 15).map(p => ddItemHTML(p, side)).join('');
-  ddEl.classList.add('open');
+function addPlayer(id){
+  const pool=getCalcPool();
+  const player=pool.find(p=>p.id===id);if(!player)return;
+  const side=lastSide.last||'a';
+  TRADE[side].push(player);
+  ['a','b'].forEach(s=>{const dd=document.getElementById(`dd-${s}`);if(dd)dd.classList.remove('open');});
+  const inp=document.getElementById(`srch-${side}`);if(inp)inp.value='';
+  renderList(side);updateTotals();hideVerdict();
 }
 
-// ... [Additional helper functions like ddItemHTML, addPlayer, renderSide] ...
-// Refer to the original Gist link to maintain the exact formatting logic.
+// ================================================================
+// === RENDER TRADE LISTS ===
+// MIGRATE TO: src/components/TradeList.jsx
+// ================================================================
+function renderList(side){
+  const list=TRADE[side],el=document.getElementById(`list-${side}`);if(!el)return;
+  if(!list.length){el.innerHTML=`<div class="empty-msg">Search and add players to Team ${side.toUpperCase()}</div>`;return;}
+  el.innerHTML=list.map(p=>{
+    const isPick=p.age==='PICK';
+    const cs=isPick?'pick':p.sport,cl=isPick?'PICK':p.sport.toUpperCase();
+    const ds=isPick?'pick':p.sport;
+    const lvl=p.level&&p.level!=='MLB'?` · <span style="color:var(--gold)">${p.level}</span>`:'';
+    const ag=!isPick&&p.age&&p.age!=='N/A'?` · Age ${p.age}`:'';
+    return `<div class="player-card" data-sport="${ds}"><div class="pc-info"><div class="pc-name">${p.displayName}</div><div class="pc-meta"><span class="chip chip-${cs}">${cl}</span>${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div></div><div class="pc-val">${(p.value||0).toLocaleString()}</div><button class="pc-remove" onclick="removePlayer('${side}','${p.id}')">✕</button></div>`;
+  }).join('');
+}
 
-// ===== MATH CALCULATIONS ENGINE WITH PACKAGE DECAY =====
-function updateTotals() {
-  const calculateTotal = (team) => {
-    let total = team.reduce((sum, p) => sum + (p.value || 0), 0);
-    // Apply 8% decay for each asset over 1
-    if (team.length > 1) {
-      let factor = 1 - ((team.length - 1) * 0.08);
-      total = Math.round(total * Math.max(0.60, factor));
-    }
-    return total;
+function removePlayer(side,id){TRADE[side]=TRADE[side].filter(p=>p.id!==id);renderList(side);updateTotals();hideVerdict();}
+function clearTrade(){TRADE.a=[];TRADE.b=[];renderList('a');renderList('b');updateTotals();hideVerdict();}
+function updateTotals(){
+  const ta=TRADE.a.reduce((s,p)=>s+(p.value||0),0);
+  const tb=TRADE.b.reduce((s,p)=>s+(p.value||0),0);
+  const ea=document.getElementById('total-a'),eb=document.getElementById('total-b');
+  if(ea)ea.textContent=ta.toLocaleString();if(eb)eb.textContent=tb.toLocaleString();
+}
+
+// ================================================================
+// === ANALYZE ===
+// MIGRATE TO: src/components/Verdict.jsx + src/services/analyzeService.js
+// ================================================================
+function analyze(){
+  const a=TRADE.a,b=TRADE.b;
+  if(!a.length&&!b.length){toast('Add players to both sides first','err');return;}
+  const ta=a.reduce((s,p)=>s+(p.value||0),0);
+  const tb=b.reduce((s,p)=>s+(p.value||0),0);
+  const diff=Math.abs(ta-tb),pct=diff/Math.max(ta,tb,1)*100;
+  const aWins=ta>=tb,needlePct=ta+tb>0?(ta/(ta+tb)*100):50;
+  const fmtLabel=currentFormat.toUpperCase();
+  let headline,headColor,interp;
+  if(pct<4){headline='⚖️ Even Trade';headColor='var(--win)';interp='Both sides are getting comparable value. This is a fair deal.';}
+  else if(pct<10){headline=aWins?'📈 Team A Gets the Edge':'📈 Team B Gets the Edge';headColor='var(--multi)';interp=`${aWins?'Team A':'Team B'} is getting slightly more value (${pct.toFixed(1)}% gap). Reasonable but leans one way.`;}
+  else if(pct<22){headline=aWins?'⚠️ Lopsided — Team A Wins':'⚠️ Lopsided — Team B Wins';headColor='var(--warn)';interp=`${aWins?'Team A':'Team B'} wins this trade by a noticeable margin. The other side should ask for more.`;}
+  else{headline=aWins?'🚨 Heavily Uneven — Team A Profits':'🚨 Heavily Uneven — Team B Profits';headColor='var(--lose)';interp=`Significantly unbalanced (${pct.toFixed(1)}% gap). ${aWins?'Team B':'Team A'} is giving up too much.`;}
+  const losingSide=aWins?'b':'a';
+  const sug=getEvenSuggestions(diff,losingSide,pct);
+  const allRows=[...a.map(p=>({...p,side:'A'})),...b.map(p=>({...p,side:'B'}))].sort((x,y)=>y.value-x.value);
+  const panel=document.getElementById('verdict-panel');
+  panel.innerHTML=`
+    <div class="verdict-top">
+      <div>
+        <div class="verdict-label">Trade Analysis <span class="format-badge ${currentFormat}">${fmtLabel}</span></div>
+        <div class="verdict-headline" style="color:${headColor}">${headline}</div>
+        <div class="verdict-interp">${interp}</div>
+      </div>
+      <div class="verdict-actions">
+        <button class="action-btn" id="copy-text-btn" onclick="copyText()">📋 Copy Summary</button>
+        <button class="action-btn" id="copy-link-btn" onclick="copyLink()">🔗 Copy Link</button>
+      </div>
+    </div>
+    <div class="verdict-scores">
+      <div class="verdict-score-block"><div class="vsb-label">Team A Receives</div><div class="vsb-value" style="color:var(--multi)">${ta.toLocaleString()}</div><div class="vsb-diff" style="color:${aWins?'var(--win)':'var(--lose)'}">${aWins?'▲ +'+(ta-tb).toLocaleString()+' pts in Team A\'s favor':'▼ '+(tb-ta).toLocaleString()+' pts below Team B'}</div></div>
+      <div class="verdict-score-block"><div class="vsb-label">Team B Receives</div><div class="vsb-value" style="color:var(--gold)">${tb.toLocaleString()}</div><div class="vsb-diff" style="color:${!aWins?'var(--win)':'var(--lose)'}">${!aWins?'▲ +'+(tb-ta).toLocaleString()+' pts in Team B\'s favor':'▼ '+(ta-tb).toLocaleString()+' pts below Team A'}</div></div>
+    </div>
+    <div class="verdict-meter-wrap">
+      <div class="verdict-meter-header"><span class="vmh-label">Trade Balance Meter</span><span class="vmh-pct">${pct.toFixed(1)}% gap · ${Math.round(needlePct)}% A / ${Math.round(100-needlePct)}% B</span></div>
+      <div class="fairness-track"><div class="fairness-needle" style="left:${needlePct}%"></div></div>
+      <div class="fairness-labels"><span>⬅ Team A Heavy</span><span style="color:var(--win)">● Fair Zone</span><span>Team B Heavy ➡</span></div>
+    </div>
+    ${pct>=4?`<div class="even-trade-panel"><div class="even-trade-title">💡 Even This Trade</div><div class="even-trade-sub">Team ${losingSide.toUpperCase()} needs ~<strong style="color:var(--gold)">${diff.toLocaleString()}</strong> more pts to balance. Suggested assets to add:</div><div class="suggestions-grid">${sug.length?sug.map(p=>suggCardHTML(losingSide,p)).join(''):'<div style="font-family:var(--font-mono);font-size:11px;color:var(--text3)">Sync more players for suggestions.</div>'}</div></div>`:''}
+    <div class="verdict-breakdown"><div class="breakdown-header">All Assets — ${fmtLabel} Values</div>${allRows.map(p=>{const cs=p.age==='PICK'?'pick':p.sport;return`<div class="breakdown-row"><span class="br-name">${p.displayName}</span><span class="chip chip-${cs}" style="font-size:9px">${p.age==='PICK'?'PICK':p.sport.toUpperCase()}</span><span class="br-side br-side-${p.side.toLowerCase()}">TM ${p.side}</span><span class="br-val">${(p.value||0).toLocaleString()}</span></div>`;}).join('')}</div>`;
+  panel.classList.add('visible');
+  setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'nearest'}),50);
+}
+
+function getEvenSuggestions(gap,losingSide,pct){
+  if(pct<4)return[];
+  const used=[...TRADE.a,...TRADE.b].map(p=>p.id);
+  const avail=getCalcPool().filter(p=>!used.includes(p.id));
+  const tol=gap*0.35;
+  const singles=avail.filter(p=>Math.abs(p.value-gap)<tol&&p.value>500).sort((a,b)=>Math.abs(a.value-gap)-Math.abs(b.value-gap)).slice(0,5);
+  if(singles.length)return singles;
+  return avail.filter(p=>p.value<gap&&p.value>400).sort((a,b)=>b.value-a.value).slice(0,5);
+}
+function suggCardHTML(side,p){
+  const isPick=p.age==='PICK';const cs=isPick?'pick':p.sport,cl=isPick?'PICK':p.sport.toUpperCase();
+  return`<div class="suggestion-card" onclick="addSuggestion('${side}','${p.id}')"><div class="sug-info"><div class="sug-add-label">+ ADD TO TM ${side.toUpperCase()}</div><div class="sug-name">${p.displayName}</div><div class="sug-meta"><span class="chip chip-${cs}">${cl}</span> ${p.pos}</div></div><div class="sug-val">${(p.value||0).toLocaleString()}</div></div>`;
+}
+function addSuggestion(side,id){
+  const pool=getCalcPool();const player=pool.find(p=>p.id===id);if(!player)return;
+  TRADE[side].push(player);renderList(side);updateTotals();analyze();
+  toast(`${player.displayName} added to Team ${side.toUpperCase()}`,'ok');
+}
+function hideVerdict(){const p=document.getElementById('verdict-panel');if(p)p.classList.remove('visible');}
+
+// ================================================================
+// === SHARE LINKS — FIXED ===
+// Uses URL hash so GitHub Pages never strips the parameters.
+// Format: index.html#trade=sport:multi|a:id1,id2|b:id3|fmt:dynasty
+// MIGRATE TO: src/services/shareService.js
+//   POST /api/share → { shortId } → link = omnitrade.gg/t/abc123
+// ================================================================
+function buildShareURL(){
+  const aIds=TRADE.a.map(p=>p.id).join(',');
+  const bIds=TRADE.b.map(p=>p.id).join(',');
+  const hash=`trade=a:${aIds}|b:${bIds}|fmt:${currentFormat}`;
+  return `${location.origin}${location.pathname}#${encodeURIComponent(hash)}`;
+}
+
+function loadFromURL(){
+  const raw=decodeURIComponent(location.hash.replace('#',''));
+  if(!raw.startsWith('trade='))return;
+  const parts=Object.fromEntries(raw.replace('trade=','').split('|').map(x=>{const i=x.indexOf(':');return[x.slice(0,i),x.slice(i+1)];}));
+  const aIds=(parts.a||'').split(',').filter(Boolean);
+  const bIds=(parts.b||'').split(',').filter(Boolean);
+  const fmt=parts.fmt||'dynasty';
+  if(!aIds.length&&!bIds.length)return;
+  setFormat(fmt);
+  const tryLoad=()=>{
+    const resolve=ids=>ids.map(id=>{
+      for(const s of['nfl','mlb','nba']){const pk=(PICKS[s]||[]).find(p=>p.id===id);if(pk)return pk;}
+      for(const s of['nfl','mlb','nba']){const pl=DB[s].find(p=>p.id===id);if(pl)return pl;}
+      return SEEDS.find(p=>p.id===id)||null;
+    }).filter(Boolean);
+    TRADE.a=resolve(aIds);TRADE.b=resolve(bIds);
+    if(TRADE.a.length||TRADE.b.length){
+      setPage('calc');renderList('a');renderList('b');updateTotals();analyze();
+      toast('Trade loaded from shared link!','ok');
+    } else {setTimeout(tryLoad,1200);}
   };
-
-  const totalA = calculateTotal(TRADE.a);
-  const totalB = calculateTotal(TRADE.b);
-  
-  document.getElementById('total-a').textContent = totalA.toLocaleString();
-  document.getElementById('total-b').textContent = totalB.toLocaleString();
+  tryLoad();
 }
 
-// ... [Additional UI functions like analyze and toast] ...
-// Refer to the original Gist link for the complete, functional implementation.
+function copyText(){
+  const a=TRADE.a,b=TRADE.b;
+  const ta=a.reduce((s,p)=>s+(p.value||0),0),tb=b.reduce((s,p)=>s+(p.value||0),0);
+  const diff=Math.abs(ta-tb),pct=diff/Math.max(ta,tb,1)*100;
+  const verdict=pct<4?'Even trade':pct<10?(ta>tb?'Team A gets the edge':'Team B gets the edge'):pct<22?(ta>tb?'Lopsided — Team A wins':'Lopsided — Team B wins'):(ta>tb?'Heavily uneven — Team A profits':'Heavily uneven — Team B profits');
+  let t=`🏆 OmniTrade · ${currentFormat.toUpperCase()}\n${'─'.repeat(34)}\nTEAM A RECEIVES  (${ta.toLocaleString()} pts)\n`;
+  a.forEach(p=>t+=`  • ${p.displayName} [${(p.sport||'').toUpperCase()}] — ${(p.value||0).toLocaleString()}\n`);
+  t+=`\nTEAM B RECEIVES  (${tb.toLocaleString()} pts)\n`;
+  b.forEach(p=>t+=`  • ${p.displayName} [${(p.sport||'').toUpperCase()}] — ${(p.value||0).toLocaleString()}\n`);
+  t+=`${'─'.repeat(34)}\nVerdict: ${verdict}\nomnitrade.gg`;
+  navigator.clipboard.writeText(t).then(()=>{
+    const btn=document.getElementById('copy-text-btn');
+    if(btn){btn.textContent='✅ Copied!';btn.classList.add('copied');}
+    toast('Trade summary copied!','ok');
+    setTimeout(()=>{if(btn){btn.textContent='📋 Copy Summary';btn.classList.remove('copied');}},2500);
+  });
+}
 
-// ===== SYSTEM INITIALIZATION AND BOOT SEQUENCE =====
-window.addEventListener('DOMContentLoaded', async () => {
+function copyLink(){
+  const url=buildShareURL();
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn=document.getElementById('copy-link-btn');
+    if(btn){btn.textContent='✅ Copied!';btn.classList.add('copied');}
+    toast('Link copied — works on any device!','ok');
+    setTimeout(()=>{if(btn){btn.textContent='🔗 Copy Link';btn.classList.remove('copied');}},2500);
+  });
+}
+
+// ================================================================
+// === SAVE / LOAD ===
+// MIGRATE TO: src/services/tradeService.js
+//   confirmSave() → POST /api/trades  (requires auth)
+//   loadTrade()   → GET /api/trades/:id
+// ================================================================
+function openSave(){
+  if(!TRADE.a.length&&!TRADE.b.length){toast('Build a trade first!','err');return;}
+  document.getElementById('save-name-input').value='';
+  document.getElementById('save-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('save-name-input').focus(),80);
+}
+function closeModal(){document.getElementById('save-modal').classList.remove('open');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+function confirmSave(){
+  const name=document.getElementById('save-name-input').value.trim()||`Trade ${new Date().toLocaleDateString()}`;
+  const ta=TRADE.a.reduce((s,p)=>s+(p.value||0),0);
+  const tb=TRADE.b.reduce((s,p)=>s+(p.value||0),0);
+  const snap=side=>TRADE[side].map(p=>({id:p.id,displayName:p.displayName,sport:p.sport,pos:p.pos,team:p.team,age:p.age,value:p.value,dynastyValue:p.dynastyValue,level:p.level,isGLeague:p.isGLeague}));
+  SAVED.unshift({id:Date.now(),name,date:new Date().toLocaleDateString(),a:snap('a'),b:snap('b'),ta,tb,fmt:currentFormat});
+  if(SAVED.length>25)SAVED.pop();
+  persistSaved();closeModal();renderSaved();
+  toast(`"${name}" saved!`,'ok');
+}
+
+function loadTrade(id){
+  const entry=SAVED.find(t=>t.id===id);if(!entry)return;
+  if(entry.fmt)setFormat(entry.fmt);
+  TRADE.a=entry.a;TRADE.b=entry.b;
+  setPage('calc');renderList('a');renderList('b');updateTotals();analyze();
+  toast(`Loaded: ${entry.name}`,'ok');
+}
+
+function deleteTrade(id){
+  const idx=SAVED.findIndex(t=>t.id===id);if(idx<0)return;
+  SAVED.splice(idx,1);persistSaved();renderSaved();
+}
+
+function renderSaved(){
+  const list=document.getElementById('saved-list');
+  const count=document.getElementById('saved-count');
+  if(count)count.textContent=`${SAVED.length} saved`;
+  if(!list)return;
+  if(!SAVED.length){list.innerHTML=`<div class="saved-empty">No saved trades yet.</div>`;return;}
+  list.innerHTML=SAVED.map(t=>`
+    <div class="saved-item">
+      <div class="si-info">
+        <div class="si-name">${t.name}</div>
+        <div class="si-meta">${t.date} · ${(t.fmt||'dynasty').toUpperCase()} · A: ${t.ta?.toLocaleString()} vs B: ${t.tb?.toLocaleString()} · ${(t.a?.length||0)+(t.b?.length||0)} assets</div>
+      </div>
+      <div class="si-actions">
+        <button class="mini-btn" onclick="loadTrade(${t.id})">Load</button>
+        <button class="mini-btn" onclick="copySavedLink(${t.id})">🔗</button>
+        <button class="mini-btn del" onclick="deleteTrade(${t.id})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function copySavedLink(id){
+  const entry=SAVED.find(t=>t.id===id);if(!entry)return;
+  const prev={a:[...TRADE.a],b:[...TRADE.b]};
+  TRADE.a=entry.a;TRADE.b=entry.b;
+  const url=buildShareURL();
+  TRADE.a=prev.a;TRADE.b=prev.b;
+  navigator.clipboard.writeText(url).then(()=>toast('Link copied!','ok'));
+}
+
+// ================================================================
+// === TOAST ===
+// ================================================================
+let _tt;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');if(!el)return;
+  el.textContent=msg;el.className=`toast show ${type}`;
+  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+// ================================================================
+// === BOOT ===
+// ================================================================
+window.addEventListener('DOMContentLoaded',async()=>{
   seedOffline();
+  PICKS=buildPicks();
+  updateCounts();
+  renderSaved();
+
+  // Attach focus listeners for tracking which side user is on
+  ['a','b'].forEach(side=>{
+    const inp=document.getElementById(`srch-${side}`);
+    if(inp) inp.addEventListener('focus',()=>{ lastSide.last=side; });
+  });
+
+  setStatus('loading','Fetching live rosters…');
+  await Promise.all([fetchNFL(),fetchMLB(),fetchNBA()]);
   injectPicks();
   updateCounts();
-  await Promise.all([fetchNFL(), fetchMLB(), fetchNBA()]);
-  injectPicks();
-  updateCounts();
+  setStatus('live',`${(DB.nfl.length+DB.mlb.length+DB.nba.length).toLocaleString()} players`);
+
+  // If a sport hub tab is open after load, render its rankings
+  const active=document.querySelector('.main-tab.active')?.dataset.page;
+  if(['nfl','mlb','nba'].includes(active)) renderHubRankings(active);
+
+  // Load shared trade from URL (runs after DB is populated)
+  loadFromURL();
 });
 </script>
 </body>
 </html>
-
-
-
-
-
