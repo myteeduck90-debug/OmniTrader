@@ -1105,7 +1105,7 @@ async function fetchNFL(){
       const dn=`${p.first_name} ${p.last_name}`;
       const dv=calcDynastyValue({displayName:dn,...p},'nfl');
       const pObj={sport:'nfl',age:p.age,years_exp:p.years_exp??3};
-      players.push({id:p.player_id||id,displayName:dn,pos,team:p.team||'FA',sport:'nfl',age:p.age,years_exp:p.years_exp??3,dynastyValue:dv,value:applyFormat(pObj,dv)});
+      players.push({id:'nfl-'+(p.player_id||id),displayName:dn,pos,team:p.team||'FA',sport:'nfl',age:p.age,years_exp:p.years_exp??3,dynastyValue:dv,value:applyFormat(pObj,dv)});
     }
     DB.nfl=players.sort((a,b)=>b.value-a.value);
   }catch(e){console.warn('NFL API failed',e);}
@@ -1148,7 +1148,7 @@ async function fetchNBA(){
       const isGL=!!(p.team&&p.team.includes('GL'));
       const pObj={displayName:dn,sport:'nba',age:p.age,years_exp:p.years_exp??3,isGLeague:isGL};
       const dv=calcDynastyValue({...p,...pObj},'nba');
-      players.push({id:p.player_id||id,displayName:dn,pos,team:p.team||'FA',sport:'nba',age:p.age,years_exp:p.years_exp??3,isGLeague:isGL,dynastyValue:dv,value:applyFormat(pObj,dv)});
+      players.push({id:'nba-'+(p.player_id||id),displayName:dn,pos,team:p.team||'FA',sport:'nba',age:p.age,years_exp:p.years_exp??3,isGLeague:isGL,dynastyValue:dv,value:applyFormat(pObj,dv)});
     }
     DB.nba=players.sort((a,b)=>b.value-a.value);
   }catch(e){console.warn('NBA API failed',e);}
