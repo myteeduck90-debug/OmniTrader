@@ -342,22 +342,78 @@ main{max-width:1440px;margin:0 auto;padding:20px}
 .toast.ok{border-color:var(--win);color:var(--win)}
 .toast.err{border-color:var(--lose);color:var(--lose)}
 
+/* ── LEVEL DROPDOWN (replaces MLB/NBA level pill groups in filter bar) ── */
+.level-select{
+  background:var(--surface3);border:1px solid var(--border);
+  color:var(--text2);padding:5px 10px;border-radius:var(--radius-sm);
+  font-family:var(--font-mono);font-size:10px;cursor:pointer;
+  outline:none;transition:border-color .15s;
+  /* matches the visual weight of the sport pills */
+}
+.level-select:focus{border-color:var(--multi);color:var(--text)}
+.level-select option{background:var(--surface2);color:var(--text)}
+
+/* ── HUB FORMAT BADGE ── */
+/* Shown in each sport hub page header so users always see active format */
+.hub-format-indicator{
+  display:flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:10px;color:var(--text3);
+  margin-top:4px;
+}
+.hub-format-indicator .fmt-label{
+  padding:2px 8px;border-radius:3px;border:1px solid;
+  font-size:9px;letter-spacing:1px;text-transform:uppercase;
+}
+/* Colors match the format strip buttons */
+.hub-format-indicator .fmt-label.dynasty{border-color:var(--multi);color:var(--multi);background:var(--multi-soft)}
+.hub-format-indicator .fmt-label.redraft{border-color:var(--nba);color:var(--nba);background:var(--nba-soft)}
+.hub-format-indicator .fmt-label.keeper{border-color:var(--nfl);color:var(--nfl);background:var(--nfl-soft)}
+
+/* ── PICK YEAR DIVIDER ── */
+/* Lightweight visual separator between pick years in the dropdown */
+.dd-year-divider{
+  padding:5px 11px 3px;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--multi);
+  background:var(--surface2);border-bottom:1px solid var(--border);
+  border-top:1px solid var(--border);
+  user-select:none;pointer-events:none;
+}
+
 /* ── RESPONSIVE ── */
 @media(max-width:860px){
   .trade-arena{grid-template-columns:1fr}
   .trade-controls-bar{gap:7px}
-  .analyze-btn{flex:1;min-width:140px;font-size:15px;padding:10px 16px}
+  /* Analyze button: full-width feel on mobile */
+  .analyze-btn{flex:1;min-width:140px;font-size:15px;padding:12px 16px}
+  /* Larger touch targets for control buttons */
+  .ctrl-btn{padding:12px 18px;font-size:11px}
   main{padding:12px}
-  header{padding:0 12px}
+  header{padding:0 12px;height:auto;min-height:58px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}
   .main-tabs,.filter-bar{padding-left:12px;padding-right:12px}
-  .format-strip{display:none}
+  /* Format strip: visible on mobile, wraps below logo if needed */
+  .format-strip{display:flex}
+  .header-right{gap:6px;flex-wrap:wrap}
   .sport-toggle-cards{gap:8px}
-  .sport-toggle-card{min-width:100px;padding:8px 12px}
+  /* Sport toggle cards: larger touch area on mobile */
+  .sport-toggle-card{min-width:100px;padding:10px 12px}
+  .stc-dot{width:10px;height:10px}
+  /* Filter pills: larger touch targets */
+  .filter-pill{padding:7px 13px;font-size:10px}
+  /* Player card remove button: larger touch target */
+  .pc-remove{padding:6px 8px;font-size:16px}
+  /* Pos pills in hub: larger tap area */
+  .pos-pill{padding:6px 13px}
+  /* Mini buttons in saved trades */
+  .mini-btn{padding:7px 10px}
 }
 @media(max-width:480px){
   .verdict-scores{grid-template-columns:1fr}
   .logo-beta{display:none}
   .hub-page-header{flex-direction:column;align-items:flex-start}
+  /* Stack header controls vertically on very small screens */
+  .header-right{width:100%}
+  .format-strip{width:100%;justify-content:center}
 }
 </style>
 </head>
@@ -399,21 +455,20 @@ main{max-width:1440px;margin:0 auto;padding:20px}
       </div>
     </div>
     <div class="filter-group">
-      <div class="fg-label">MLB Levels</div>
-      <div class="fg-pills">
-        <span class="filter-pill on" data-filter="MLB" onclick="toggleFilter('MLB')">MLB Majors</span>
-        <span class="filter-pill on" data-filter="AAA" onclick="toggleFilter('AAA')">AAA</span>
-        <span class="filter-pill on" data-filter="AA" onclick="toggleFilter('AA')">AA</span>
-        <span class="filter-pill on" data-filter="A+" onclick="toggleFilter('A+')">A+</span>
-        <span class="filter-pill on" data-filter="A" onclick="toggleFilter('A')">A Ball</span>
-      </div>
-    </div>
-    <div class="filter-group">
-      <div class="fg-label">NBA Levels</div>
-      <div class="fg-pills">
-        <span class="filter-pill on" data-filter="nba-main" onclick="toggleFilter('nba-main')">NBA Roster</span>
-        <span class="filter-pill on" data-filter="nba-gleague" onclick="toggleFilter('nba-gleague')">G-League</span>
-      </div>
+      <div class="fg-label">Level</div>
+      <!-- Single dropdown replaces the MLB Levels and NBA Levels pill groups.
+           Changing this updates ACTIVE_FILTERS for all relevant level keys. -->
+      <select class="level-select" id="level-select" onchange="setLevelFilter(this.value)">
+        <option value="all">All Levels</option>
+        <optgroup label="MLB Levels">
+          <option value="MLB">MLB Majors only</option>
+          <option value="MLB+AAA">MLB + AAA</option>
+          <option value="minors">All Minors (MLB+AAA+AA+A++A)</option>
+        </optgroup>
+        <optgroup label="NBA Levels">
+          <option value="nba-main">NBA Roster only</option>
+        </optgroup>
+      </select>
     </div>
   </div>
 </div>
@@ -443,7 +498,8 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <span class="tab-icon">🏀</span> NBA
     <span class="tab-count" id="cnt-nba">—</span>
   </button>
-  <button class="main-tab" data-page="add" onclick="setPage('add')">
+  <!-- ADD PLAYER tab hidden from UI. Code preserved for future release. -->
+  <button class="main-tab" data-page="add" onclick="setPage('add')" style="display:none">
     <span class="tab-icon">➕</span> ADD PLAYER
   </button>
 </div>
@@ -547,6 +603,9 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--nfl)">NFL</div>
       <div class="hub-sport-sub">National Football League · Fantasy Hub</div>
+      <div class="hub-format-indicator">
+        Format: <span class="fmt-label dynasty" id="hub-fmt-nfl">DYNASTY</span>
+      </div>
     </div>
   </div>
   <div class="content-hub">
@@ -638,6 +697,9 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--mlb)">MLB</div>
       <div class="hub-sport-sub">Major League Baseball · Majors + Minors Hub</div>
+      <div class="hub-format-indicator">
+        Format: <span class="fmt-label dynasty" id="hub-fmt-mlb">DYNASTY</span>
+      </div>
     </div>
   </div>
   <div class="content-hub">
@@ -726,6 +788,9 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--nba)">NBA</div>
       <div class="hub-sport-sub">National Basketball Association · Fantasy Hub</div>
+      <div class="hub-format-indicator">
+        Format: <span class="fmt-label dynasty" id="hub-fmt-nba">DYNASTY</span>
+      </div>
     </div>
   </div>
   <div class="content-hub">
@@ -947,10 +1012,15 @@ function setFormat(fmt) {
     DB[sport].forEach(p=>{ p.value=applyFormat(p,p.dynastyValue); });
   });
   updateTotals();
-  // Update format badges on content hub pages
+  // Update format badges on content hub ranking headers
   ['nfl','mlb','nba'].forEach(s=>{
     const b=document.getElementById(`${s}-format-badge`);
     if(b){b.textContent=fmt.toUpperCase();b.className=`format-badge ${fmt}`;}
+  });
+  // Update hub page header format indicators (Option A — visible on each hub page)
+  ['nfl','mlb','nba'].forEach(s=>{
+    const ind=document.getElementById(`hub-fmt-${s}`);
+    if(ind){ind.textContent=fmt.toUpperCase();ind.className=`fmt-label ${fmt}`;}
   });
   // Re-render open rankings
   const active=document.querySelector('.main-tab.active')?.dataset.page;
@@ -968,6 +1038,34 @@ function toggleFilter(key) {
   ACTIVE_FILTERS[key]=!ACTIVE_FILTERS[key];
   const pill=document.querySelector(`.filter-pill[data-filter="${key}"]`);
   if(pill) pill.classList.toggle('on',ACTIVE_FILTERS[key]);
+}
+
+// Handles the level dropdown in the filter bar.
+// Sets ACTIVE_FILTERS for all MLB and NBA level keys based on selected option.
+function setLevelFilter(value) {
+  // MLB level keys
+  const mlbLevels = ['MLB','AAA','AA','A+','A'];
+  // NBA level keys
+  const nbaLevels = ['nba-main','nba-gleague'];
+
+  if(value === 'all') {
+    // All levels on
+    mlbLevels.forEach(k => { ACTIVE_FILTERS[k] = true; });
+    nbaLevels.forEach(k => { ACTIVE_FILTERS[k] = true; });
+  } else if(value === 'MLB') {
+    // MLB majors only, no minors, NBA unaffected
+    ACTIVE_FILTERS['MLB'] = true;
+    ['AAA','AA','A+','A'].forEach(k => { ACTIVE_FILTERS[k] = false; });
+  } else if(value === 'MLB+AAA') {
+    ACTIVE_FILTERS['MLB'] = true;
+    ACTIVE_FILTERS['AAA'] = true;
+    ['AA','A+','A'].forEach(k => { ACTIVE_FILTERS[k] = false; });
+  } else if(value === 'minors') {
+    mlbLevels.forEach(k => { ACTIVE_FILTERS[k] = true; });
+  } else if(value === 'nba-main') {
+    ACTIVE_FILTERS['nba-main'] = true;
+    ACTIVE_FILTERS['nba-gleague'] = false;
+  }
 }
 
 function toggleFilters() {
@@ -1371,18 +1469,48 @@ function renderDD(side){
   const picks=ranked.filter(p=>p.age==='PICK').slice(0,8);
   let html='';
   if(players.length)html+=`<div class="dd-section-label">Players</div>`+players.map(ddItemHTML).join('');
-  if(picks.length)html+=`<div class="dd-section-label">Draft Picks</div>`+picks.map(ddItemHTML).join('');
+  if(picks.length){
+    // Group picks by year with lightweight year dividers for readability
+    const picksByYear={};
+    picks.forEach(p=>{
+      const m=p.displayName.match(/^(\d{4})/);
+      const yr=m?m[1]:'Other';
+      if(!picksByYear[yr])picksByYear[yr]=[];
+      picksByYear[yr].push(p);
+    });
+    Object.keys(picksByYear).sort().forEach(yr=>{
+      html+=`<div class="dd-year-divider">${yr} Picks</div>`;
+      html+=picksByYear[yr].map(ddItemHTML).join('');
+    });
+  }
   ddEl.innerHTML=html;ddEl.classList.add('open');
 }
 
 function ddItemHTML(p){
   const isPick=p.age==='PICK';
-  // MLB players show their classification (MLB or PROSPECT) instead of just "MLB"
   const cs=isPick?'pick':p.sport;
   const cl=isPick?'PICK':p.sport==='mlb'&&p.classification?p.classification.toUpperCase():p.sport.toUpperCase();
   const lvl=p.level&&p.level!=='MLB'?` · <span style="color:var(--gold);font-size:9px">${p.level}</span>`:'';
   const ag=!isPick&&p.age&&p.age!=='N/A'?` · Age ${p.age}`:'';
-  return `<div class="dd-item" onmousedown="addPlayer('${p.id}')"><div class="dd-item-left"><div class="dd-item-name">${p.displayName}</div><div class="dd-item-meta"><span class="chip chip-${cs}">${cl}</span>${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div></div><div class="dd-item-val">${(p.value||0).toLocaleString()}</div></div>`;
+
+  if(isPick){
+    // Picks: name only, no redundant meta line (name contains all the info)
+    return `<div class="dd-item" onmousedown="addPlayer('${p.id}')">
+      <div class="dd-item-left">
+        <div class="dd-item-name">${p.displayName} <span class="chip chip-pick" style="font-size:8px">PICK</span></div>
+      </div>
+      <div class="dd-item-val">${(p.value||0).toLocaleString()}</div>
+    </div>`;
+  }
+
+  // Players: sport chip moves beside the name for quick multi-sport identification
+  return `<div class="dd-item" onmousedown="addPlayer('${p.id}')">
+    <div class="dd-item-left">
+      <div class="dd-item-name">${p.displayName} <span class="chip chip-${cs}" style="font-size:8px">${cl}</span></div>
+      <div class="dd-item-meta">${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div>
+    </div>
+    <div class="dd-item-val">${(p.value||0).toLocaleString()}</div>
+  </div>`;
 }
 
 function addPlayer(id){
@@ -1404,11 +1532,16 @@ function renderList(side){
   if(!list.length){el.innerHTML=`<div class="empty-msg">Search and add players to Team ${side.toUpperCase()}</div>`;return;}
   el.innerHTML=list.map(p=>{
     const isPick=p.age==='PICK';
-    const cs=isPick?'pick':p.sport,cl=isPick?'PICK':p.sport.toUpperCase();
+    const cs=isPick?'pick':p.sport;
+    const cl=isPick?'PICK':p.sport==='mlb'&&p.classification?p.classification.toUpperCase():p.sport.toUpperCase();
     const ds=isPick?'pick':p.sport;
     const lvl=p.level&&p.level!=='MLB'?` · <span style="color:var(--gold)">${p.level}</span>`:'';
     const ag=!isPick&&p.age&&p.age!=='N/A'?` · Age ${p.age}`:'';
-    return `<div class="player-card" data-sport="${ds}"><div class="pc-info"><div class="pc-name">${p.displayName}</div><div class="pc-meta"><span class="chip chip-${cs}">${cl}</span>${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div></div><div class="pc-val">${(p.value||0).toLocaleString()}</div><button class="pc-remove" onclick="removePlayer('${side}','${p.id}')">✕</button></div>`;
+    // Picks: no meta line — name contains all info
+    // Players: sport chip beside name, meta shows pos/team/age
+    const nameChip=`${p.displayName} <span class="chip chip-${cs}" style="font-size:8px">${cl}</span>`;
+    const meta=isPick?'':`<div class="pc-meta">${p.pos}${p.team?' · '+p.team:''}${lvl}${ag}</div>`;
+    return `<div class="player-card" data-sport="${ds}"><div class="pc-info"><div class="pc-name">${nameChip}</div>${meta}</div><div class="pc-val">${(p.value||0).toLocaleString()}</div><button class="pc-remove" onclick="removePlayer('${side}','${p.id}')">✕</button></div>`;
   }).join('');
 }
 
