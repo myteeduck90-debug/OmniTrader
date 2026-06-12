@@ -353,22 +353,6 @@ main{max-width:1440px;margin:0 auto;padding:20px}
 .level-select:focus{border-color:var(--multi);color:var(--text)}
 .level-select option{background:var(--surface2);color:var(--text)}
 
-/* ── HUB FORMAT BADGE ── */
-/* Shown in each sport hub page header so users always see active format */
-.hub-format-indicator{
-  display:flex;align-items:center;gap:6px;
-  font-family:var(--font-mono);font-size:10px;color:var(--text3);
-  margin-top:4px;
-}
-.hub-format-indicator .fmt-label{
-  padding:2px 8px;border-radius:3px;border:1px solid;
-  font-size:9px;letter-spacing:1px;text-transform:uppercase;
-}
-/* Colors match the format strip buttons */
-.hub-format-indicator .fmt-label.dynasty{border-color:var(--multi);color:var(--multi);background:var(--multi-soft)}
-.hub-format-indicator .fmt-label.redraft{border-color:var(--nba);color:var(--nba);background:var(--nba-soft)}
-.hub-format-indicator .fmt-label.keeper{border-color:var(--nfl);color:var(--nfl);background:var(--nfl-soft)}
-
 /* ── PICK YEAR DIVIDER ── */
 /* Lightweight visual separator between pick years in the dropdown */
 .dd-year-divider{
@@ -406,15 +390,21 @@ main{max-width:1440px;margin:0 auto;padding:20px}
   .pos-pill{padding:6px 13px}
   /* Mini buttons in saved trades */
   .mini-btn{padding:7px 10px}
-}
 @media(max-width:480px){
   .verdict-scores{grid-template-columns:1fr}
   .logo-beta{display:none}
   .hub-page-header{flex-direction:column;align-items:flex-start}
-  /* Stack header controls vertically on very small screens */
-  .header-right{width:100%}
-  .format-strip{width:100%;justify-content:center}
+  /* Compact two-row header on small screens */
+  header{padding-top:6px;padding-bottom:6px;gap:4px}
+  .header-right{width:100%;gap:4px;align-items:center}
+  /* Format strip takes most of the row */
+  .format-strip{flex:1;justify-content:center}
+  /* Hide status text, keep dot — saves ~60px of label space */
+  #status-text{display:none}
+  /* Sync and Filters stay compact beside format strip */
+  .hdr-btn{padding:4px 8px;font-size:9px}
 }
+
 </style>
 </head>
 <body>
@@ -603,9 +593,6 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--nfl)">NFL</div>
       <div class="hub-sport-sub">National Football League · Fantasy Hub</div>
-      <div class="hub-format-indicator">
-        Format: <span class="fmt-label dynasty" id="hub-fmt-nfl">DYNASTY</span>
-      </div>
     </div>
   </div>
   <div class="content-hub">
@@ -697,9 +684,6 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--mlb)">MLB</div>
       <div class="hub-sport-sub">Major League Baseball · Majors + Minors Hub</div>
-      <div class="hub-format-indicator">
-        Format: <span class="fmt-label dynasty" id="hub-fmt-mlb">DYNASTY</span>
-      </div>
     </div>
   </div>
   <div class="content-hub">
@@ -788,9 +772,6 @@ main{max-width:1440px;margin:0 auto;padding:20px}
     <div>
       <div class="hub-sport-name" style="color:var(--nba)">NBA</div>
       <div class="hub-sport-sub">National Basketball Association · Fantasy Hub</div>
-      <div class="hub-format-indicator">
-        Format: <span class="fmt-label dynasty" id="hub-fmt-nba">DYNASTY</span>
-      </div>
     </div>
   </div>
   <div class="content-hub">
